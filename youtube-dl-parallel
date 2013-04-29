@@ -1,0 +1,58 @@
+#!/bin/bash
+# Copyright (c) 2013 DLH. See LICENSE.txt for the MIT license.
+#
+# Usage: youtube-dl-parallel url [url...]
+#
+# The JOBS environment variable can be used to control the number of jobs to run
+# in parallel. The default is 3. See parallel(1) for more documentation.
+
+test "$JOBS" || JOBS=3
+
+function prefix-output() {
+    padding=$1
+    prefix=$2
+    while read line; do
+        printf "%-${padding}s: %s\n" "$prefix" "$line"
+    done
+}
+
+function download() {
+    padding=$1
+    prefix=$2
+    url=$3
+    youtube-dl --newline "$url" 2>&1 | prefix-output "$padding" "$prefix"
+}
+
+function get-title() {
+    url=$1
+    title=$(youtube-dl --get-title "$url" 2>&1)
+    test $? -eq 0 || title="$url"
+    echo "$title" > "$TITLES_DIRECTORY/$PARALLEL_SEQ"
+}
+
+TITLES_DIRECTORY=$(mktemp -d -t youtube-dl-parallel)
+trap 'rm -r "$TITLES_DIRECTORY"' EXIT
+
+# Export functions and variables for use with parallel
+export -f prefix-output download get-title
+export TITLES_DIRECTORY
+
+# Fetch all titles
+parallel --jobs "$JOBS" get-title ::: "$@"
+
+# Determine the largest title length
+title_padding=0
+declare -a url_titles
+
+pushd "$TITLES_DIRECTORY" > /dev/null
+for title_file in $(ls | sort -n); do
+    title=$(cat "$title_file")
+    length=$(echo "$title" | wc -m)
+    if test $length -gt $title_padding; then
+        title_padding=$length
+    fi
+    url_titles+=("$title")
+done
+popd > /dev/null
+
+(for x in "${url_titles[@]}"; do echo "$x"; done) | parallel --xapply --arg-file - --ungroup --jobs "$JOBS" "download $title_padding {1} {2}" ::: "$@"
