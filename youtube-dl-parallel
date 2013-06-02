@@ -1,12 +1,5 @@
 #!/bin/bash
 # Copyright (c) 2013 DLH. See LICENSE.txt for the MIT license.
-#
-# Usage: youtube-dl-parallel url [url...]
-#
-# The JOBS environment variable can be used to control the number of jobs to run
-# in parallel. The default is 3. See parallel(1) for more documentation.
-
-test "$JOBS" || JOBS=3
 
 function prefix-output() {
     padding=$1
@@ -20,7 +13,7 @@ function download() {
     padding=$1
     prefix=$2
     url=$3
-    youtube-dl --newline "$url" 2>&1 | prefix-output "$padding" "$prefix"
+    youtube-dl $YOUTUBE_DL_ARGS --newline "$url" 2>&1 | prefix-output "$padding" "$prefix"
 }
 
 function get-title() {
@@ -30,15 +23,50 @@ function get-title() {
     echo "$title" > "$TITLES_DIRECTORY/$PARALLEL_SEQ"
 }
 
+JOBS=3
+YOUTUBE_DL_ARGS=
 TITLES_DIRECTORY=$(mktemp -d -t youtube-dl-parallel)
 trap 'rm -r "$TITLES_DIRECTORY"' EXIT
 
+# Parse options
+while getopts "hj:" option; do
+    case $option in
+        h)
+            echo "Usage: $0 [-hj] <url> [<url> ...] [-- <youtube-dl options>]"
+            echo "    -h       : Shows this help message."
+            echo "    -j <jobs>: The number of jobs to run in parallel. The default is 3."
+            exit;;
+        j)
+            JOBS="$OPTARG"
+            shift;;
+        \?)
+            exit 1;;
+    esac
+done
+
+# Parse urls and youtube-dl args
+declare -a urls
+for url in "$@"; do
+    if test "$1" = "--"; then
+        shift
+        YOUTUBE_DL_ARGS="$@"
+        break
+    fi
+    urls+=($url)
+    shift
+done
+
+if test -z "$urls"; then
+    echo "No urls specified. Try $0 -h for more information."
+    exit 1
+fi
+
 # Export functions and variables for use with parallel
 export -f prefix-output download get-title
-export TITLES_DIRECTORY
+export TITLES_DIRECTORY YOUTUBE_DL_ARGS
 
 # Fetch all titles
-parallel --jobs "$JOBS" get-title ::: "$@"
+parallel --jobs "$JOBS" get-title ::: "${urls[@]}"
 
 # Determine the largest title length
 title_padding=0
@@ -55,4 +83,4 @@ for title_file in $(ls | sort -n); do
 done
 popd > /dev/null
 
-(for x in "${url_titles[@]}"; do echo "$x"; done) | parallel --xapply --arg-file - --ungroup --jobs "$JOBS" "download $title_padding {1} {2}" ::: "$@"
+parallel --xapply --ungroup --jobs "$JOBS" "download $title_padding {1} {2}" ::: "${url_titles[@]}" ::: "${urls[@]}"
