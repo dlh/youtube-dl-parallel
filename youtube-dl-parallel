@@ -1,62 +1,78 @@
 #!/bin/bash
 # Copyright (c) 2013 DLH. See LICENSE.txt for the MIT license.
 
+declare -a URLS URL_TITLES
+JOBS=3
+YOUTUBE_DL_ARGS=
+TITLE_PADDING=0
+TITLES_DIRECTORY=$(mktemp -d -t youtube-dl-parallel)
+trap 'rm -r "$TITLES_DIRECTORY"' EXIT
+
 function prefix-output() {
-    padding=$1
-    prefix=$2
+    local padding=$1
+    local prefix=$2
     while read line; do
         printf "%-${padding}s: %s\n" "$prefix" "$line"
     done
 }
 
 function download() {
-    padding=$1
-    prefix=$2
-    url=$3
+    local padding=$1
+    local prefix=$2
+    local url=$3
     youtube-dl $YOUTUBE_DL_ARGS --newline "$url" 2>&1 | prefix-output "$padding" "$prefix"
 }
 
 function get-title() {
-    url=$1
-    title=$(youtube-dl --get-title "$url" 2>&1)
+    local url=$1
+    local title=$(youtube-dl --get-title "$url" 2>&1)
     test $? -eq 0 || title="$url"
     echo "$title" > "$TITLES_DIRECTORY/$PARALLEL_SEQ"
 }
 
-JOBS=3
-YOUTUBE_DL_ARGS=
-TITLES_DIRECTORY=$(mktemp -d -t youtube-dl-parallel)
-trap 'rm -r "$TITLES_DIRECTORY"' EXIT
+function parse-options()  {
+    while getopts "hj:" option "$@"; do
+        case $option in
+            h)
+                echo "Usage: $0 [-hj] <url> [<url> ...] [-- <youtube-dl options>]"
+                echo "    -h       : Shows this help message."
+                echo "    -j <jobs>: The number of jobs to run in parallel. The default is 3."
+                exit;;
+            j)
+                JOBS="$OPTARG";;
+            \?)
+                exit 1;;
+        esac
+    done
+    shift $((OPTIND - 1))
 
-# Parse options
-while getopts "hj:" option; do
-    case $option in
-        h)
-            echo "Usage: $0 [-hj] <url> [<url> ...] [-- <youtube-dl options>]"
-            echo "    -h       : Shows this help message."
-            echo "    -j <jobs>: The number of jobs to run in parallel. The default is 3."
-            exit;;
-        j)
-            JOBS="$OPTARG"
-            shift;;
-        \?)
-            exit 1;;
-    esac
-done
-
-# Parse urls and youtube-dl args
-declare -a urls
-for url in "$@"; do
-    if test "$url" = "--"; then
+    for url in "$@"; do
+        if test "$url" = "--"; then
+            shift
+            YOUTUBE_DL_ARGS="$@"
+            break
+        fi
+        URLS+=($url)
         shift
-        YOUTUBE_DL_ARGS="$@"
-        break
-    fi
-    urls+=($url)
-    shift
-done
+    done
+}
 
-if test -z "$urls"; then
+function find-longest-title() {
+    pushd "$TITLES_DIRECTORY" > /dev/null
+    for title_file in $(ls | sort -n); do
+        local title=$(cat "$title_file")
+        local length=$(echo "$title" | wc -m)
+        if test $length -gt $TITLE_PADDING; then
+            TITLE_PADDING=$length
+        fi
+        URL_TITLES+=("$title")
+    done
+    popd > /dev/null
+}
+
+parse-options "$@"
+
+if test -z "$URLS"; then
     echo "No urls specified. Try $0 -h for more information."
     exit 1
 fi
@@ -65,22 +81,6 @@ fi
 export -f prefix-output download get-title
 export TITLES_DIRECTORY YOUTUBE_DL_ARGS
 
-# Fetch all titles
-parallel --jobs "$JOBS" get-title ::: "${urls[@]}"
-
-# Determine the largest title length
-title_padding=0
-declare -a url_titles
-
-pushd "$TITLES_DIRECTORY" > /dev/null
-for title_file in $(ls | sort -n); do
-    title=$(cat "$title_file")
-    length=$(echo "$title" | wc -m)
-    if test $length -gt $title_padding; then
-        title_padding=$length
-    fi
-    url_titles+=("$title")
-done
-popd > /dev/null
-
-parallel --xapply --ungroup --jobs "$JOBS" "download $title_padding {1} {2}" ::: "${url_titles[@]}" ::: "${urls[@]}"
+parallel --jobs "$JOBS" get-title ::: "${URLS[@]}"
+find-longest-title
+parallel --xapply --ungroup --jobs "$JOBS" "download $TITLE_PADDING {1} {2}" ::: "${URL_TITLES[@]}" ::: "${URLS[@]}"
