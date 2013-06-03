@@ -47,7 +47,7 @@ done
 # Parse urls and youtube-dl args
 declare -a urls
 for url in "$@"; do
-    if test "$1" = "--"; then
+    if test "$url" = "--"; then
         shift
         YOUTUBE_DL_ARGS="$@"
         break
