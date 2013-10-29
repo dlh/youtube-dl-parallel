@@ -5,7 +5,7 @@ declare -a URLS URL_TITLES
 JOBS=3
 YOUTUBE_DL_ARGS=
 TITLE_PADDING=0
-TITLES_DIRECTORY=$(mktemp -d -t youtube-dl-parallel)
+TITLES_DIRECTORY=$(mktemp -d -t youtube-dl-parallel.XXX)
 trap 'rm -r "$TITLES_DIRECTORY"' EXIT
 
 function prefix-output() {
