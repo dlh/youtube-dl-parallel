@@ -8,7 +8,7 @@ TITLE_PADDING=0
 TITLES_DIRECTORY=$(mktemp -d -t youtube-dl-parallel.XXX)
 trap 'rm -r "$TITLES_DIRECTORY"' EXIT
 
-function prefix-output() {
+function prefix_output() {
     local padding=$1
     local prefix=$2
     while read line; do
@@ -20,17 +20,17 @@ function download() {
     local padding=$1
     local prefix=$2
     local url=$3
-    youtube-dl $YOUTUBE_DL_ARGS --newline "$url" 2>&1 | prefix-output "$padding" "$prefix"
+    youtube-dl $YOUTUBE_DL_ARGS --newline "$url" 2>&1 | prefix_output "$padding" "$prefix"
 }
 
-function get-title() {
+function get_title() {
     local url=$1
     local title=$(youtube-dl --ignore-config --get-title "$url" 2>&1)
     test $? -eq 0 || title="$url"
     echo "$title" > "$TITLES_DIRECTORY/$PARALLEL_SEQ"
 }
 
-function parse-options()  {
+function parse_options()  {
     while getopts "hj:" option "$@"; do
         case $option in
             h)
@@ -57,7 +57,7 @@ function parse-options()  {
     done
 }
 
-function find-longest-title() {
+function find_longest_title() {
     pushd "$TITLES_DIRECTORY" > /dev/null
     for title_file in $(ls | sort -n); do
         local title=$(cat "$title_file")
@@ -70,7 +70,7 @@ function find-longest-title() {
     popd > /dev/null
 }
 
-parse-options "$@"
+parse_options "$@"
 
 if test -z "$URLS"; then
     echo "No urls specified. Try $0 -h for more information."
@@ -78,9 +78,9 @@ if test -z "$URLS"; then
 fi
 
 # Export functions and variables for use with parallel
-export -f prefix-output download get-title
+export -f prefix_output download get_title
 export TITLES_DIRECTORY YOUTUBE_DL_ARGS
 
-parallel --jobs "$JOBS" get-title ::: "${URLS[@]}"
-find-longest-title
+parallel --jobs "$JOBS" get_title ::: "${URLS[@]}"
+find_longest_title
 parallel --xapply --ungroup --jobs "$JOBS" "download $TITLE_PADDING {1} {2}" ::: "${URL_TITLES[@]}" ::: "${URLS[@]}"
