@@ -20,12 +20,12 @@ function download() {
     local padding=$1
     local prefix=$2
     local url=$3
-    youtube-dl $YOUTUBE_DL_ARGS --newline "$url" 2>&1 | prefix_output "$padding" "$prefix"
+    youtube-dl $YOUTUBE_DL_ARGS --no-playlist --newline "$url" 2>&1 | prefix_output "$padding" "$prefix"
 }
 
 function get_title() {
     local url=$1
-    local title=$(youtube-dl --ignore-config --get-title "$url" 2>&1)
+    local title=$(youtube-dl --ignore-config --no-playlist --get-title "$url" 2>&1)
     test $? -eq 0 || title="$url"
     echo "$title" > "$TITLES_DIRECTORY/$PARALLEL_SEQ"
 }
