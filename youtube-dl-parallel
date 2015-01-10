@@ -37,6 +37,8 @@ function parse_options()  {
                 echo "Usage: $0 [-hj] <url> [<url> ...] [-- <youtube-dl options>]"
                 echo "    -h       : Shows this help message."
                 echo "    -j <jobs>: The number of jobs to run in parallel. The default is 3."
+                echo
+                echo "If “-” is provided as an argument, then urls will additionally be read from stdin."
                 exit;;
             j)
                 JOBS="$OPTARG";;
@@ -47,12 +49,17 @@ function parse_options()  {
     shift $((OPTIND - 1))
 
     for url in "$@"; do
-        if test "$url" = "--"; then
+        if test "$url" = "-"; then
+            while read line; do
+                URLS+=($line)
+            done
+        elif test "$url" = "--"; then
             shift
             YOUTUBE_DL_ARGS="$@"
             break
+        else
+            URLS+=($url)
         fi
-        URLS+=($url)
         shift
     done
 }
