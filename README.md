@@ -13,6 +13,8 @@ A small utility program to spawn a number of youtube-dl processes in parallel.
         -h       : Shows this help message.
         -j <jobs>: The number of jobs to run in parallel. The default is 3.
 
+    If “-” is provided as an argument, then urls will additionally be read from stdin.
+
 ## Caveats
 
 To download a YouTube playlist or channel using `youtube-dl-parallel` you'll
