@@ -20,8 +20,7 @@ A small utility program to spawn a number of youtube-dl processes in parallel.
 To download a YouTube playlist or channel using `youtube-dl-parallel` you'll
 need to first find all the videos in that collection.
 
-    # Prepend ids with the hostname because they may start with "-".
-    youtube-dl --get-id <playlist or channel> | xargs printf "youtu.be/%s\n"
+    youtube-dl --get-id <playlist or channel> | youtube-dl-parallel -
 
 ## License
 
