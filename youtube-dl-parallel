@@ -40,7 +40,7 @@ function parse_options()  {
     while getopts "hj:" option "$@"; do
         case $option in
             h)
-                echo "Usage: $0 [-hj] <url> [<url> ...] [-- <youtube-dl options>]"
+                echo "Usage: ${0##*/} [-hj] <url> [<url> ...] [-- <youtube-dl options>]"
                 echo "    -h       : Shows this help message."
                 echo "    -j <jobs>: The number of jobs to run in parallel. The default is 3."
                 echo
@@ -86,7 +86,7 @@ function find_longest_title() {
 parse_options "$@"
 
 if test -z "$URLS"; then
-    error "No urls specified. Try $0 -h for more information."
+    error "No urls specified. Try ${0##*/} -h for more information."
 fi
 
 # Export functions and variables for use with parallel
