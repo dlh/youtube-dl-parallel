@@ -4,8 +4,9 @@ A small utility program to spawn a number of youtube-dl processes in parallel.
 
 ## Requirements
 
-* [GNU Parallel](http://www.gnu.org/software/parallel)
-* [youtube-dl](http://rg3.github.io/youtube-dl)
+* [GNU Parallel](https://www.gnu.org/software/parallel/)
+* [youtube-dl](https://rg3.github.io/youtube-dl/)
+* [Bash](https://www.gnu.org/software/bash/)
 
 ## Documentation
 
