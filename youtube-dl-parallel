@@ -31,7 +31,7 @@ function download() {
 
 function get_title() {
     local url=$1
-    local title=$(youtube-dl --ignore-config --no-playlist --youtube-skip-dash-manifest --get-title -- "$url" 2>&1)
+    local title=$(youtube-dl --no-playlist --youtube-skip-dash-manifest --get-title -- "$url" 2>&1)
     test $? -eq 0 || title="$url"
     echo "$title" > "$TITLES_DIRECTORY/$PARALLEL_SEQ"
 }
