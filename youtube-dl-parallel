@@ -74,7 +74,7 @@ function find_longest_title() {
     pushd "$TITLES_DIRECTORY" > /dev/null
     for title_file in $(ls | sort -n); do
         local title=$(cat "$title_file")
-        local length=$(echo "$title" | wc -m)
+        local length=$(echo "$title" | wc -m | tr -d '[[:space:]]')
         if test $length -gt $TITLE_PADDING; then
             TITLE_PADDING=$length
         fi
