@@ -1,18 +1,17 @@
 #!/bin/bash
 # Copyright (c) 2013 DLH. See LICENSE.txt for the MIT license.
 
-declare -a URLS URL_TITLES
-JOBS=3
-YOUTUBE_DL_ARGS=
-TITLE_PADDING=0
-
 function error() {
     echo "Error: $@"
+    echo
+    echo "Traceback"
+    echo "========="
+    local frame=0
+    while caller $frame; do
+        ((frame++));
+    done
     exit 1
 }
-
-TITLES_DIRECTORY=$(mktemp -d -t youtube-dl-parallel.XXX) || error "mktemp failed"
-trap 'rm -r "$TITLES_DIRECTORY"' EXIT
 
 function prefix_output() {
     local padding=$1
@@ -26,14 +25,16 @@ function download() {
     local padding=$1
     local prefix=$2
     local url=$3
-    youtube-dl $YOUTUBE_DL_ARGS --no-playlist --newline -- "$url" 2>&1 | prefix_output "$padding" "$prefix"
+    shift 3
+    youtube-dl "$@" --no-playlist --newline -- "$url" 2>&1 | prefix_output "$padding" "$prefix"
 }
 
 function get_title() {
-    local url=$1
+    local title_directory=$1
+    local url=$2
     local title=$(youtube-dl --no-playlist --youtube-skip-dash-manifest --get-title -- "$url" 2>&1)
     test $? -eq 0 || title="$url"
-    echo "$title" > "$TITLES_DIRECTORY/$PARALLEL_SEQ"
+    echo "$title" > "$title_directory/$PARALLEL_SEQ"
 }
 
 function parse_options()  {
@@ -52,7 +53,11 @@ function parse_options()  {
                 error "Unknown option";;
         esac
     done
-    shift $((OPTIND - 1))
+
+    # Special case. See test/test_options_ytdl_args_no_urls.sh
+    if test $# -gt 0 -a "$1" != "--"; then
+        shift $((OPTIND - 1))
+    fi
 
     for url in "$@"; do
         if test "$url" = "-"; then
@@ -71,10 +76,11 @@ function parse_options()  {
 }
 
 function find_longest_title() {
-    pushd "$TITLES_DIRECTORY" > /dev/null
+    local title_directory=$1
+    pushd "$title_directory" > /dev/null
     for title_file in $(ls | sort -n); do
         local title=$(cat "$title_file")
-        local length=$(echo "$title" | wc -m | tr -d '[[:space:]]')
+        local length=$(echo -n "$title" | wc -m | tr -d '[[:space:]]')
         if test $length -gt $TITLE_PADDING; then
             TITLE_PADDING=$length
         fi
@@ -83,16 +89,45 @@ function find_longest_title() {
     popd > /dev/null
 }
 
-parse_options "$@"
+function create_title_directory() {
+    mktemp -d -t youtube-dl-parallel.XXX || error "mktemp failed"
+}
 
-if test -z "$URLS"; then
-    error "No urls specified. Try ${0##*/} -h for more information."
+function parallel_will_cite_option() {
+    parallel --gnu --will-cite true ::: "" > /dev/null 2>&1 && echo "--will-cite"
+    return 0
+}
+
+function main() {
+    parse_options "$@"
+    if test -z "$URLS"; then
+        error "No urls specified. Try ${0##*/} -h for more information."
+    fi
+
+    local title_directory=$(create_title_directory)
+    trap "rm -r '$title_directory'" EXIT
+
+    # Export functions for use with parallel
+    export -f prefix_output download get_title
+
+    # * Check if we can use the --will-cite option. Ubuntu 12.04 LTS ships with a very
+    #   old version of GNU Parallel that does not support it
+    # * Ubuntu 12.04's parallel also uses the --tollef option by default, so we need
+    #   to override that here.
+    # * We use --will-cite because the end-user should not be spammed to cite our usage
+    #   of GNU Parallel.
+    local args="$(parallel_will_cite_option) --gnu --jobs $JOBS"
+    parallel $args "get_title '$title_directory'" ::: "${URLS[@]}"
+    find_longest_title "$title_directory"
+    parallel $args --xapply --ungroup "download $((TITLE_PADDING + 1)) {1} {2} $YOUTUBE_DL_ARGS" ::: "${URL_TITLES[@]}" ::: "${URLS[@]}"
+}
+
+# Global variables
+declare -a URLS URL_TITLES
+JOBS=3
+YOUTUBE_DL_ARGS=
+TITLE_PADDING=0
+
+if test "${BASH_SOURCE[0]}" = "${0}"; then
+    main "$@"
 fi
-
-# Export functions and variables for use with parallel
-export -f prefix_output download get_title
-export TITLES_DIRECTORY YOUTUBE_DL_ARGS
-
-parallel --jobs "$JOBS" get_title ::: "${URLS[@]}"
-find_longest_title
-parallel --xapply --ungroup --jobs "$JOBS" "download $TITLE_PADDING {1} {2}" ::: "${URL_TITLES[@]}" ::: "${URLS[@]}"

@@ -1,0 +1,20 @@
+os:
+  - linux
+  - osx
+language: generic
+before_install:
+  - |
+    if [[ "$TRAVIS_OS_NAME" == "linux" ]]; then
+      sudo apt-get -qq update &&
+      sudo apt-get install -y parallel &&
+      sudo wget https://yt-dl.org/downloads/latest/youtube-dl -O /usr/local/bin/youtube-dl &&
+      sudo chmod +x /usr/local/bin/youtube-dl
+    fi
+  - |
+    if [[ "$TRAVIS_OS_NAME" == "osx" ]]; then
+      brew update &&
+      brew install parallel youtube-dl
+    fi
+script:
+  - ./test/run_all.sh
+  - ./youtube-dl-parallel https://youtu.be/dQw4w9WgXcQ https://youtu.be/J---aiyznGQ -- --simulate

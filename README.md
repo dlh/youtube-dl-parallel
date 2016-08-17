@@ -1,3 +1,5 @@
+[![Build Status](https://travis-ci.org/dlh/youtube-dl-parallel.svg)](https://travis-ci.org/dlh/youtube-dl-parallel)
+
 # youtube-dl-parallel
 
 A small utility program to spawn a number of youtube-dl processes in parallel.
