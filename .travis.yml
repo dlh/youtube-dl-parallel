@@ -16,5 +16,7 @@ before_install:
       brew install parallel youtube-dl
     fi
 script:
+  - youtube-dl --version
+  - parallel --version
   - ./test/run_all.sh
   - ./youtube-dl-parallel https://youtu.be/dQw4w9WgXcQ https://youtu.be/J---aiyznGQ -- --simulate
