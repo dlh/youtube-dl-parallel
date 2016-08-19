@@ -2,7 +2,7 @@
 
 # youtube-dl-parallel
 
-A small utility program to spawn a number of youtube-dl processes in parallel.
+Concurrent downloads with youtube-dl.
 
 ## Requirements
 
