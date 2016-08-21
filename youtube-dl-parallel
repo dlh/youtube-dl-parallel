@@ -13,20 +13,30 @@ function error() {
     exit 1
 }
 
-function prefix_output() {
-    local padding=$1
-    local prefix=$2
+function prettify_output() {
+    local output_file=$1
+    local padding=$2
+    local prefix=$3
     while read line; do
-        printf "%-${padding}s: %s\n" "$prefix" "$line"
+        local computed_prefix=$(printf "%-${padding}s:" "$prefix")
+        # Keep only the latest "[download]" line
+        awk -v prefix="$computed_prefix [download]" \
+            'index($0, prefix) { found_line = 1 } { if (!found_line) print $0 }' \
+            "$output_file" > "$output_file.tmp"
+        mv "$output_file.tmp" "$output_file"
+        echo "$computed_prefix $line" >> "$output_file"
     done
 }
 
 function download() {
-    local padding=$1
-    local prefix=$2
-    local url=$3
-    shift 3
-    youtube-dl "$@" --no-playlist --newline -- "$url" 2>&1 | prefix_output "$padding" "$prefix"
+    local output_directory=$1
+    local padding=$2
+    local prefix=$3
+    local url=$4
+    shift 4
+    local output_file="$output_directory/$PARALLEL_SEQ"
+    touch "$output_file"
+    youtube-dl "$@" --no-playlist --newline -- "$url" 2>&1 | prettify_output "$output_file" "$padding" "$prefix"
 }
 
 function get_title() {
@@ -77,19 +87,17 @@ function parse_options()  {
 
 function find_longest_title() {
     local title_directory=$1
-    pushd "$title_directory" > /dev/null
-    for title_file in $(ls | sort -n); do
-        local title=$(cat "$title_file")
+    for f in $(ls "$title_directory" | sort -n); do
+        local title=$(cat "$title_directory/$f")
         local length=$(echo -n "$title" | wc -m | tr -d '[[:space:]]')
         if test $length -gt $TITLE_PADDING; then
             TITLE_PADDING=$length
         fi
         URL_TITLES+=("$title")
     done
-    popd > /dev/null
 }
 
-function create_title_directory() {
+function create_temp_directory() {
     mktemp -d -t youtube-dl-parallel.XXX || error "mktemp failed"
 }
 
@@ -98,17 +106,47 @@ function parallel_will_cite_option() {
     return 0
 }
 
+function is_tty() {
+    test -t 1
+}
+
+function display_output() {
+    local output_directory=$1
+    if is_tty; then
+        tput rc
+        tput ed
+    fi
+    for f in $(ls "$output_directory" | grep -v "\.tmp$" | sort -n); do
+        cat "$output_directory/$f"
+    done
+}
+
+function display_output_periodically() {
+    local output_directory=$1
+    if is_tty; then
+        tput sc
+        trap "tput clear && tput sc" SIGWINCH
+    fi
+    while true; do
+        display_output "$output_directory"
+        sleep 1
+    done
+}
+
 function main() {
     parse_options "$@"
     if test -z "$URLS"; then
         error "No urls specified. Try ${0##*/} -h for more information."
     fi
 
-    local title_directory=$(create_title_directory)
-    trap "rm -r '$title_directory'" EXIT
+    local temp_directory=$(create_temp_directory)
+    trap "rm -r '$temp_directory'" EXIT
+    local title_directory="$temp_directory/titles"
+    local output_directory="$temp_directory/outputs"
+    mkdir "$title_directory" "$output_directory"
 
     # Export functions for use with parallel
-    export -f prefix_output download get_title
+    export -f prettify_output download get_title
 
     # * Check if we can use the --will-cite option. Ubuntu 12.04 LTS ships with a very
     #   old version of GNU Parallel that does not support it
@@ -117,9 +155,15 @@ function main() {
     # * We use --will-cite because the end-user should not be spammed to cite our usage
     #   of GNU Parallel.
     local args="$(parallel_will_cite_option) --gnu --jobs $JOBS"
+
     parallel $args "get_title '$title_directory'" ::: "${URLS[@]}"
     find_longest_title "$title_directory"
-    parallel $args --xapply --ungroup "download $((TITLE_PADDING + 1)) {1} {2} $YOUTUBE_DL_ARGS" ::: "${URL_TITLES[@]}" ::: "${URLS[@]}"
+
+    display_output_periodically "$output_directory" &
+    trap "kill $!" EXIT
+
+    parallel $args --xapply --ungroup "download '$output_directory' $((TITLE_PADDING + 1)) {1} {2} $YOUTUBE_DL_ARGS" ::: "${URL_TITLES[@]}" ::: "${URLS[@]}"
+    display_output "$output_directory"
 }
 
 # Global variables

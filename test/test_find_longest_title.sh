@@ -2,7 +2,7 @@
 
 . youtube-dl-parallel
 
-dir=$(create_title_directory)
+dir=$(create_temp_directory)
 trap "rm -r '$dir'" EXIT
 
 echo "a" > "$dir/0"
