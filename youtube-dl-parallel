@@ -14,37 +14,34 @@ function error() {
 }
 
 function prettify_output() {
-    local output_file=$1
-    local padding=$2
-    local prefix=$3
+	local output=$1
+	local output_tmp=$2
     while read line; do
-        local computed_prefix=$(printf "%-${padding}s:" "$prefix")
-        # Keep only the latest "[download]" line
-        awk -v prefix="$computed_prefix [download]" \
-            'index($0, prefix) { found_line = 1 } { if (!found_line) print $0 }' \
-            "$output_file" > "$output_file.tmp"
-        mv "$output_file.tmp" "$output_file"
-        echo "$computed_prefix $line" >> "$output_file"
+		awk '!/^\[download\] +[0-9]/' "$output" > "$output_tmp"
+		echo "$line" >> "$output_tmp"
+		mv "$output_tmp" "$output"
     done
 }
 
 function download() {
-    local output_directory=$1
-    local padding=$2
-    local prefix=$3
-    local url=$4
-    shift 4
-    local output_file="$output_directory/$PARALLEL_SEQ"
-    touch "$output_file"
-    youtube-dl "$@" --no-playlist --newline -- "$url" 2>&1 | prettify_output "$output_file" "$padding" "$prefix"
-}
-
-function get_title() {
-    local title_directory=$1
+    local temp_directory=$1
     local url=$2
-    local title=$(youtube-dl --no-playlist --youtube-skip-dash-manifest --get-title -- "$url" 2>&1)
-    test $? -eq 0 || title="$url"
-    echo "$title" > "$title_directory/$PARALLEL_SEQ"
+    shift 2
+	local status_directory="$temp_directory/$PARALLEL_SEQ"
+	mkdir "$status_directory" || error
+
+	local output="$status_directory/output"
+	local output_tmp="${output}.tmp"
+	touch "$output" || error
+
+    # Add a newline spacer to differentiate downloads
+    if test "$PARALLEL_SEQ" -gt 1; then
+        echo >> "$output"
+    fi
+
+	touch "$status_directory/is_running"
+	youtube-dl "$@" --no-playlist --newline -- "$url" 2>&1 | prettify_output "$output" "$output_tmp"
+	rm "$status_directory/is_running"
 }
 
 function parse_options()  {
@@ -85,18 +82,6 @@ function parse_options()  {
     done
 }
 
-function find_longest_title() {
-    local title_directory=$1
-    for f in $(ls "$title_directory" | sort -n); do
-        local title=$(cat "$title_directory/$f")
-        local length=$(echo -n "$title" | wc -m | tr -d '[[:space:]]')
-        if test $length -gt $TITLE_PADDING; then
-            TITLE_PADDING=$length
-        fi
-        URL_TITLES+=("$title")
-    done
-}
-
 function create_temp_directory() {
     mktemp -d -t youtube-dl-parallel.XXX || error "mktemp failed"
 }
@@ -106,29 +91,43 @@ function parallel_will_cite_option() {
     return 0
 }
 
-function is_tty() {
-    test -t 1
-}
-
 function display_output() {
-    local output_directory=$1
-    if is_tty; then
-        tput rc
-        tput ed
+    local temp_directory=$1
+    local is_tty=$2
+	local tput_clear_screen=$3
+    if $is_tty; then
+        tput -S <<-EOF
+			rc
+			$tput_clear_screen
+		EOF
     fi
-    for f in $(ls "$output_directory" | grep -v "\.tmp$" | sort -n); do
-        cat "$output_directory/$f"
+    for n in $(ls "$temp_directory" | sort -n); do
+		local is_running=false
+		if $is_tty && test -f "$temp_directory/$n/is_running"; then
+			is_running=true
+			tput setaf 4
+			# tput smso
+		fi
+        cat "$temp_directory/$n/output"
+
+		if $is_tty && $is_running; then
+			tput sgr0
+			# tput rmso
+		fi
+        # echo -e "$(cat "$temp_directory/$n/output")"
     done
 }
 
 function display_output_periodically() {
-    local output_directory=$1
-    if is_tty; then
+    local temp_directory=$1
+    local is_tty=$2
+    local tput_clear_screen=$3
+    if $is_tty; then
         tput sc
-        trap "tput clear && tput sc" SIGWINCH
+        # trap "echo -e 'clear\nsc' | tput -S" SIGWINCH
     fi
     while true; do
-        display_output "$output_directory"
+        display_output "$temp_directory" "$is_tty" "$tput_clear_screen"
         sleep 1
     done
 }
@@ -139,14 +138,20 @@ function main() {
         error "No urls specified. Try ${0##*/} -h for more information."
     fi
 
-    local temp_directory=$(create_temp_directory)
-    trap "rm -r '$temp_directory'" EXIT
-    local title_directory="$temp_directory/titles"
-    local output_directory="$temp_directory/outputs"
-    mkdir "$title_directory" "$output_directory"
+	local temp_directory=$(create_temp_directory)
+
+    local is_tty=false
+	local tput_clear_screen
+    if test -t 1; then
+        is_tty=true
+        tput ed && tput_clear_screen=ed || tput_clear_screen=cd
+    fi
+    display_output_periodically "$temp_directory" "$is_tty" "$tput_clear_screen" &
+
+	trap "rm -r '$temp_directory'; kill \$(jobs -pr)" SIGINT SIGTERM EXIT
 
     # Export functions for use with parallel
-    export -f prettify_output download get_title
+    export -f prettify_output download
 
     # * Check if we can use the --will-cite option. Ubuntu 12.04 LTS ships with a very
     #   old version of GNU Parallel that does not support it
@@ -154,24 +159,19 @@ function main() {
     #   to override that here.
     # * We use --will-cite because the end-user should not be spammed to cite our usage
     #   of GNU Parallel.
-    local args="$(parallel_will_cite_option) --gnu --jobs $JOBS"
-
-    parallel $args "get_title '$title_directory'" ::: "${URLS[@]}"
-    find_longest_title "$title_directory"
-
-    display_output_periodically "$output_directory" &
-    trap "kill $!" EXIT
-
-    parallel $args --xapply --ungroup "download '$output_directory' $((TITLE_PADDING + 1)) {1} {2} $YOUTUBE_DL_ARGS" ::: "${URL_TITLES[@]}" ::: "${URLS[@]}"
-    display_output "$output_directory"
+    parallel $(parallel_will_cite_option) --gnu --jobs $JOBS \
+        "download '$temp_directory' {1} $YOUTUBE_DL_ARGS" ::: "${URLS[@]}"
+    display_output "$temp_directory" "$is_tty" "$tput_clear_screen"
 }
 
 # Global variables
-declare -a URLS URL_TITLES
+declare -a URLS
 JOBS=3
 YOUTUBE_DL_ARGS=
-TITLE_PADDING=0
 
 if test "${BASH_SOURCE[0]}" = "${0}"; then
     main "$@"
 fi
+
+# TODO improve resizing of window
+# TODO add command line options for color of downloading items
