@@ -2,31 +2,31 @@
 # Copyright (c) 2013 DLH. See LICENSE.txt for the MIT license.
 
 function error() {
-    echo "Error: $@"
-    echo
-    echo "Traceback"
-    echo "========="
-    local frame=0
-    while caller $frame; do
-        ((frame++));
-    done
-    exit 1
+	echo "Error: $@"
+	echo
+	echo "Traceback"
+	echo "========="
+	local frame=0
+	while caller $frame; do
+		((frame++));
+	done
+	exit 1
 }
 
 function prettify_output() {
 	local output=$1
 	local output_tmp=$2
-    while read line; do
+	while read line; do
 		awk '!/^\[download\] +[0-9]/' "$output" > "$output_tmp"
 		echo "$line" >> "$output_tmp"
 		mv "$output_tmp" "$output"
-    done
+	done
 }
 
 function download() {
-    local temp_directory=$1
-    local url=$2
-    shift 2
+	local temp_directory=$1
+	local url=$2
+	shift 2
 	local status_directory="$temp_directory/$PARALLEL_SEQ"
 	mkdir "$status_directory" || error
 
@@ -34,10 +34,10 @@ function download() {
 	local output_tmp="${output}.tmp"
 	touch "$output" || error
 
-    # Add a newline spacer to differentiate downloads
-    if test "$PARALLEL_SEQ" -gt 1; then
-        echo >> "$output"
-    fi
+	# Add a newline spacer to differentiate downloads
+	if test "$PARALLEL_SEQ" -gt 1; then
+		echo >> "$output"
+	fi
 
 	touch "$status_directory/is_running"
 	youtube-dl "$@" --no-playlist --newline -- "$url" 2>&1 | prettify_output "$output" "$output_tmp"
@@ -45,123 +45,123 @@ function download() {
 }
 
 function parse_options()  {
-    while getopts "hj:" option "$@"; do
-        case $option in
-            h)
-                echo "Usage: ${0##*/} [-hj] <url> [<url> ...] [-- <youtube-dl options>]"
-                echo "    -h       : Shows this help message."
-                echo "    -j <jobs>: The number of jobs to run in parallel. The default is 3."
-                echo
-                echo "If “-” is provided as an argument, then urls will additionally be read from stdin."
-                exit;;
-            j)
-                JOBS="$OPTARG";;
-            \?)
-                error "Unknown option";;
-        esac
-    done
+	while getopts "hj:" option "$@"; do
+		case $option in
+			h)
+				echo "Usage: ${0##*/} [-hj] <url> [<url> ...] [-- <youtube-dl options>]"
+				echo "    -h       : Shows this help message."
+				echo "    -j <jobs>: The number of jobs to run in parallel. The default is 3."
+				echo
+				echo "If “-” is provided as an argument, then urls will additionally be read from stdin."
+				exit;;
+			j)
+				JOBS="$OPTARG";;
+			\?)
+				error "Unknown option";;
+		esac
+	done
 
-    # Special case. See test/test_options_ytdl_args_no_urls.sh
-    if test $# -gt 0 -a "$1" != "--"; then
-        shift $((OPTIND - 1))
-    fi
+	# Special case. See test/test_options_ytdl_args_no_urls.sh
+	if test $# -gt 0 -a "$1" != "--"; then
+		shift $((OPTIND - 1))
+	fi
 
-    for url in "$@"; do
-        if test "$url" = "-"; then
-            while read line; do
-                URLS+=($line)
-            done
-        elif test "$url" = "--"; then
-            shift
-            YOUTUBE_DL_ARGS="$@"
-            break
-        else
-            URLS+=($url)
-        fi
-        shift
-    done
+	for url in "$@"; do
+		if test "$url" = "-"; then
+			while read line; do
+				URLS+=($line)
+			done
+		elif test "$url" = "--"; then
+			shift
+			YOUTUBE_DL_ARGS="$@"
+			break
+		else
+			URLS+=($url)
+		fi
+		shift
+	done
 }
 
 function create_temp_directory() {
-    mktemp -d -t youtube-dl-parallel.XXX || error "mktemp failed"
+	mktemp -d -t youtube-dl-parallel.XXX || error "mktemp failed"
 }
 
 function parallel_will_cite_option() {
-    parallel --gnu --will-cite true ::: "" > /dev/null 2>&1 && echo "--will-cite"
-    return 0
+	parallel --gnu --will-cite true ::: "" > /dev/null 2>&1 && echo "--will-cite"
+	return 0
 }
 
 function display_output() {
-    local temp_directory=$1
-    local is_tty=$2
+	local temp_directory=$1
+	local is_tty=$2
 	local tput_clear_screen=$3
-    if $is_tty; then
-        tput -S <<-EOF
+	if $is_tty; then
+		tput -S <<-EOF
 			rc
 			$tput_clear_screen
 		EOF
-    fi
-    for n in $(ls "$temp_directory" | sort -n); do
+	fi
+	for n in $(ls "$temp_directory" | sort -n); do
 		local is_running=false
 		if $is_tty && test -f "$temp_directory/$n/is_running"; then
 			is_running=true
 			tput setaf 4
 			# tput smso
 		fi
-        cat "$temp_directory/$n/output"
+		cat "$temp_directory/$n/output"
 
 		if $is_tty && $is_running; then
 			tput sgr0
 			# tput rmso
 		fi
-        # echo -e "$(cat "$temp_directory/$n/output")"
-    done
+		# echo -e "$(cat "$temp_directory/$n/output")"
+	done
 }
 
 function display_output_periodically() {
-    local temp_directory=$1
-    local is_tty=$2
-    local tput_clear_screen=$3
-    if $is_tty; then
-        tput sc
-        # trap "echo -e 'clear\nsc' | tput -S" SIGWINCH
-    fi
-    while true; do
-        display_output "$temp_directory" "$is_tty" "$tput_clear_screen"
-        sleep 1
-    done
+	local temp_directory=$1
+	local is_tty=$2
+	local tput_clear_screen=$3
+	if $is_tty; then
+		tput sc
+		# trap "echo -e 'clear\nsc' | tput -S" SIGWINCH
+	fi
+	while true; do
+		display_output "$temp_directory" "$is_tty" "$tput_clear_screen"
+		sleep 1
+	done
 }
 
 function main() {
-    parse_options "$@"
-    if test -z "$URLS"; then
-        error "No urls specified. Try ${0##*/} -h for more information."
-    fi
+	parse_options "$@"
+	if test -z "$URLS"; then
+		error "No urls specified. Try ${0##*/} -h for more information."
+	fi
 
 	local temp_directory=$(create_temp_directory)
 
-    local is_tty=false
+	local is_tty=false
 	local tput_clear_screen
-    if test -t 1; then
-        is_tty=true
-        tput ed && tput_clear_screen=ed || tput_clear_screen=cd
-    fi
-    display_output_periodically "$temp_directory" "$is_tty" "$tput_clear_screen" &
+	if test -t 1; then
+		is_tty=true
+		tput ed && tput_clear_screen=ed || tput_clear_screen=cd
+	fi
+	display_output_periodically "$temp_directory" "$is_tty" "$tput_clear_screen" &
 
 	trap "rm -r '$temp_directory'; kill \$(jobs -pr)" SIGINT SIGTERM EXIT
 
-    # Export functions for use with parallel
-    export -f prettify_output download
+	# Export functions for use with parallel
+	export -f prettify_output download
 
-    # * Check if we can use the --will-cite option. Ubuntu 12.04 LTS ships with a very
-    #   old version of GNU Parallel that does not support it
-    # * Ubuntu 12.04's parallel also uses the --tollef option by default, so we need
-    #   to override that here.
-    # * We use --will-cite because the end-user should not be spammed to cite our usage
-    #   of GNU Parallel.
-    parallel $(parallel_will_cite_option) --gnu --jobs $JOBS \
-        "download '$temp_directory' {1} $YOUTUBE_DL_ARGS" ::: "${URLS[@]}"
-    display_output "$temp_directory" "$is_tty" "$tput_clear_screen"
+	# * Check if we can use the --will-cite option. Ubuntu 12.04 LTS ships with a very
+	#   old version of GNU Parallel that does not support it
+	# * Ubuntu 12.04's parallel also uses the --tollef option by default, so we need
+	#   to override that here.
+	# * We use --will-cite because the end-user should not be spammed to cite our usage
+	#   of GNU Parallel.
+	parallel $(parallel_will_cite_option) --gnu --jobs $JOBS \
+		"download '$temp_directory' {1} $YOUTUBE_DL_ARGS" ::: "${URLS[@]}"
+	display_output "$temp_directory" "$is_tty" "$tput_clear_screen"
 }
 
 # Global variables
@@ -170,7 +170,7 @@ JOBS=3
 YOUTUBE_DL_ARGS=
 
 if test "${BASH_SOURCE[0]}" = "${0}"; then
-    main "$@"
+	main "$@"
 fi
 
 # TODO improve resizing of window
