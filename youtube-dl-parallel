@@ -13,11 +13,19 @@ function error() {
     exit 1
 }
 
+function padding_multibyte() {
+    local padding=$1
+    local prefix=$2
+    local bytes=$(echo -n "$prefix" | wc -c)
+    local chars=$(echo -n "$prefix" | wc -m)
+    echo $(($padding + $bytes - $chars))
+}
+
 function prefix_output() {
     local padding=$1
     local prefix=$2
     while read line; do
-        printf "%-${padding}s: %s\n" "$prefix" "$line"
+        printf "%-*s: %s\n" "$padding" "$prefix" "$line"
     done
 }
 
@@ -26,6 +34,11 @@ function download() {
     local prefix=$2
     local url=$3
     shift 3
+
+    # bash's field width modifier for '%s' counts bytes not characters
+    # We need to compute the padding for characters
+    padding=$(padding_multibyte "$padding" "$prefix")
+
     youtube-dl "$@" --no-playlist --newline -- "$url" 2>&1 | prefix_output "$padding" "$prefix"
 }
 
@@ -108,7 +121,7 @@ function main() {
     trap "rm -r '$title_directory'" EXIT
 
     # Export functions for use with parallel
-    export -f prefix_output download get_title
+    export -f padding_multibyte prefix_output download get_title
 
     # * Check if we can use the --will-cite option. Ubuntu 12.04 LTS ships with a very
     #   old version of GNU Parallel that does not support it
