@@ -106,11 +106,6 @@ function create_title_directory() {
     mktemp -d -t youtube-dl-parallel.XXX || error "mktemp failed"
 }
 
-function parallel_will_cite_option() {
-    parallel --gnu --will-cite true ::: "" > /dev/null 2>&1 && echo "--will-cite"
-    return 0
-}
-
 function main() {
     parse_options "$@"
     if test -z "$URLS"; then
@@ -123,13 +118,9 @@ function main() {
     # Export functions for use with parallel
     export -f padding_multibyte prefix_output download get_title
 
-    # * Check if we can use the --will-cite option. Ubuntu 12.04 LTS ships with a very
-    #   old version of GNU Parallel that does not support it
-    # * Ubuntu 12.04's parallel also uses the --tollef option by default, so we need
-    #   to override that here.
-    # * We use --will-cite because the end-user should not be spammed to cite our usage
-    #   of GNU Parallel.
-    local args="$(parallel_will_cite_option) --gnu --jobs $JOBS"
+    # Ubuntu 12.04's parallel uses the --tollef option by default, so we need
+    # to override that
+    local args="--no-notice --gnu --jobs $JOBS"
     parallel $args "get_title '$title_directory'" ::: "${URLS[@]}"
     find_longest_title "$title_directory"
     parallel $args --xapply --ungroup "download $((TITLE_PADDING + 1)) {1} {2} $YOUTUBE_DL_ARGS" ::: "${URL_TITLES[@]}" ::: "${URLS[@]}"
