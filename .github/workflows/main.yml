@@ -1,0 +1,32 @@
+name: tests
+on: [push, pull_request]
+jobs:
+  test:
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        os: [ubuntu-16.04, ubuntu-18.04, macOS-latest]
+    steps:
+    - name: Install Linux dependencies
+      if: runner.os == 'Linux'
+      run: |
+        set -x
+        sudo apt-get install -y parallel
+        sudo wget https://yt-dl.org/downloads/latest/youtube-dl -O /usr/local/bin/youtube-dl
+        sudo chmod +x /usr/local/bin/youtube-dl
+    - name: Install macOS dependencies
+      if: runner.os == 'macOS'
+      run: |
+        brew install youtube-dl
+    - name: Show versions
+      run: |
+        set -x
+        bash --version
+        youtube-dl --version
+        parallel --version
+    - name: Checkout
+      uses: actions/checkout@v2
+    - name: Test
+      run: ./test/run_all.sh
+    - name: Sanity test
+      run: ./youtube-dl-parallel https://youtu.be/dQw4w9WgXcQ https://youtu.be/J---aiyznGQ -- --simulate

@@ -1,4 +1,4 @@
-[![Build Status](https://travis-ci.org/dlh/youtube-dl-parallel.svg)](https://travis-ci.org/dlh/youtube-dl-parallel)
+[![Build Status](https://github.com/dlh/youtube-dl-parallel/workflows/tests/badge.svg)](https://github.com/dlh/youtube-dl-parallel/actions)
 
 # youtube-dl-parallel
 
