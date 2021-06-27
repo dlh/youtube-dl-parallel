@@ -108,8 +108,7 @@ function process_urls(){
             #get ids
             URLS+=($(youtube-dl --get-id $URL))
         else
-            echo "v"
-            URLS+=URL
+            URLS+=(${URL})
         fi
     done
 }
