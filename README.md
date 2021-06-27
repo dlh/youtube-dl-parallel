@@ -18,13 +18,6 @@ Concurrent downloads with youtube-dl.
 
     If “-” is provided as an argument, then urls will additionally be read from stdin.
 
-## Caveats
-
-To download a YouTube playlist or channel using `youtube-dl-parallel` you'll
-need to first find all the videos in that collection.
-
-    youtube-dl --get-id <playlist or channel> | youtube-dl-parallel -
-
 ## License
 
 Copyright (c) 2013 DLH. See LICENSE.txt for the MIT license.
